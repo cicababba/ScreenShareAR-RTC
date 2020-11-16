@@ -17,6 +17,7 @@
 package com.google.ar.core.examples.java;
 
 import android.content.Context;
+import android.util.Base64;
 import android.util.Log;
 
 import com.github.nkzawa.emitter.Emitter;
@@ -41,6 +42,7 @@ import org.webrtc.VideoSource;
 import org.webrtc.VideoTrack;
 
 import java.net.URISyntaxException;
+import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.LinkedList;
 
@@ -58,10 +60,13 @@ public class WebRtcClient {
     private MediaStream mLocalMediaStream;
     private VideoSource mVideoSource;
     private RtcListener mListener;
+    private static TapListener tapListener;
     private Socket mSocket;
     VideoCapturer videoCapturer;
     MessageHandler messageHandler = new MessageHandler();
     Context mContext;
+
+    DataChannel dc;
 
     /**
      * Implement this interface to be notified of events.
@@ -74,6 +79,12 @@ public class WebRtcClient {
         void onHandup();
 
         void onStatusChanged(String newStatus);
+    }
+
+    public interface TapListener {
+
+        void onTap(JSONObject message);
+
     }
 
     public interface Command {
@@ -129,6 +140,15 @@ public class WebRtcClient {
         }
     }
 
+    public class CreateTapCommand implements Command {
+        @Override
+        public void execute(String peerId, JSONObject payload) throws JSONException {
+            Log.d(TAG, "AddIceCandidateCommand");
+            Log.i("peerID",peerId);
+            tapListener.onTap(payload);
+        }
+    }
+
     /**
      * Send a message through the signaling server
      *
@@ -155,6 +175,7 @@ public class WebRtcClient {
             commandMap.put("offer", new CreateAnswerCommand());
             commandMap.put("answer", new SetRemoteSDPCommand());
             commandMap.put("candidate", new AddIceCandidateCommand());
+            commandMap.put("tap", new CreateTapCommand());
         }
 
         public Emitter.Listener onMessage = new Emitter.Listener() {
@@ -293,6 +314,42 @@ public class WebRtcClient {
 
         @Override
         public void onDataChannel(DataChannel dataChannel) {
+            Log.d(TAG, "New Data channel " + dc.label());
+
+            dataChannel.registerObserver(new DataChannel.Observer() {
+                @Override
+                public void onBufferedAmountChange(long previousAmount) {
+                    Log.d(TAG, "Data channel buffered amount changed: " + dc.label() + ": " + dc.state());
+                }
+
+                @Override
+                public void onStateChange() {
+                    Log.d(TAG, "Data channel state changed: " + dc.label() + ": " + dc.state());
+                }
+
+                @Override
+                public void onMessage(final DataChannel.Buffer buffer) {
+                    //https://www.programcreek.com/java-api-examples/?code=angellsl10/react-native-webrtc/react-native-webrtc-master/android/src/main/java/com/oney/WebRTCModule/DataChannelObserver.java
+
+                    byte[] bytes;
+                    if (buffer.data.hasArray()) {
+                        bytes = buffer.data.array();
+                    } else {
+                        bytes = new byte[buffer.data.remaining()];
+                        buffer.data.get(bytes);
+                    }
+
+                    String strData;
+                    if (buffer.binary) {
+                        strData = Base64.encodeToString(bytes, Base64.NO_WRAP);
+                        Log.d(TAG, "Got binary msg: " + strData + " over " + dc);
+                    }else {
+                        strData = new String(bytes, Charset.forName("UTF-8"));
+                        Log.d(TAG, "Got msg: " + strData + " over " + dc);
+                    }
+
+                }
+            });
         }
 
         @Override
@@ -303,6 +360,7 @@ public class WebRtcClient {
         public Peer(String id, int endPoint) {
             Log.d(TAG, "new Peer: " + id + " " + endPoint);
             this.pc = factory.createPeerConnection(iceServers, mPeerConnConstraints, this);
+            dc = this.pc.createDataChannel("test", new DataChannel.Init());
             this.id = id;
             this.endPoint = endPoint;
             pc.addStream(mLocalMediaStream); //, new MediaConstraints()
@@ -312,7 +370,6 @@ public class WebRtcClient {
     private Peer addPeer(String id, int endPoint) {
         Peer peer = new Peer(id, endPoint);
         peers.put(id, peer);
-
         endPoints[endPoint] = true;
         return peer;
     }
@@ -322,6 +379,10 @@ public class WebRtcClient {
         peer.pc.close();
         peers.remove(peer.id);
         endPoints[peer.endPoint] = false;
+    }
+
+    public static void initListener(TapListener listener) {
+        tapListener = listener;
     }
 
     public WebRtcClient(Context context, RtcListener listener, VideoCapturer capturer, PeerConnectionClient.PeerConnectionParameters params) {

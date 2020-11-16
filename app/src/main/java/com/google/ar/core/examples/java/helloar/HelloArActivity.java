@@ -49,6 +49,7 @@ import com.google.ar.core.PointCloud;
 import com.google.ar.core.Session;
 import com.google.ar.core.Trackable;
 import com.google.ar.core.TrackingState;
+import com.google.ar.core.examples.java.WebRtcClient;
 import com.google.ar.core.examples.java.common.helpers.CameraPermissionHelper;
 import com.google.ar.core.examples.java.common.helpers.DepthSettings;
 import com.google.ar.core.examples.java.common.helpers.DisplayRotationHelper;
@@ -71,6 +72,9 @@ import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException;
 import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException;
 import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException;
+
+import org.json.JSONObject;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -81,7 +85,7 @@ import java.util.List;
  * ARCore API. The application will display any detected planes and will allow the user to tap on a
  * plane to place a 3d model of the Android robot.
  */
-public class HelloArActivity extends AppCompatActivity implements SampleRender.Renderer {
+public class HelloArActivity extends AppCompatActivity implements SampleRender.Renderer, WebRtcClient.TapListener {
 
   private static final String TAG = HelloArActivity.class.getSimpleName();
 
@@ -194,6 +198,7 @@ public class HelloArActivity extends AppCompatActivity implements SampleRender.R
             popup.show();
           }
         });
+    WebRtcClient.initListener(this);
   }
 
   /** Menu button to launch feature specific settings. */
@@ -769,4 +774,10 @@ public class HelloArActivity extends AppCompatActivity implements SampleRender.R
     // Fallback color.
     return new float[] {0f, 0f, 0f};
   }
+
+  @Override
+  public void onTap(JSONObject message) {
+    Log.i("SONO STATO TOCCATO", message.toString());
+  }
+
 }
